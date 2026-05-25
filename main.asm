@@ -157,9 +157,8 @@ PROC_1SEC: ; processa a flag de 1 segundo
     rcall INC_REL ; incrementa o relógio
     lds r16, MODO_ATUAL ; carrega o valor do registrador MODO_ATUAL em r16
     cpi r16, 1 ; compara o valor de r16 com 1
-    breq chk_cr_1sec ; se o valor de r16 for 1, pula para o chk_cr_1sec
-    rcall SEND_TIME_REL ; envia o tempo do relógio
-
+    brne chk_cr_1sec ; se não for modo 1, pula para chk_cr_1sec (cronômetro)
+    rcall SEND_TIME_REL ; envia o tempo do relógio (apenas modo 1)
     rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
 chk_cr_1sec: ;
@@ -433,7 +432,7 @@ process_mux:
 
 display_on:
     out PORTB, r18
-    ldi r16, 8       ; Carrega o valor para seleção da multiplexação (0b0001)
+    ldi r16, 8       ; Carrega o valor para seleção da multiplexação (0b1000)
     mov r19, r17     ; R19 serve como um seletor, sendo a qtd de shitleft para chegar no elemento correto
     tst r19
     breq shift_done
