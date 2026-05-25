@@ -12,15 +12,15 @@ MUX_CONT:       .byte 1    ; Contador para multiplexação (0-3)
 BLINK_CONT:     .byte 1    ; Contador para piscar dígito no Modo 3
 
 ; --- Flags para o Main Loop ---
-FLAG_1SEC:      .byte 1
-FLAG_START:     .byte 1
-FLAG_RESET:     .byte 1
-FLAG_MODE:      .byte 1
+FLAG_1SEC:      .byte 1 ;flag para aumentar 1 segundo
+FLAG_START:     .byte 1 ;flag para o botão start
+FLAG_RESET:     .byte 1 ;flag para o botão reset
+FLAG_MODE:      .byte 1 ;flag para o botão mode
 
 ; --- Vetores de Interrupção ---
-.cseg
-.org 0x0000
-    rjmp RESET_START
+.cseg ; usa memoria flash
+.org 0x0000 ; inicio do programa, ao iniciar o programa, o programa vai para o RESET_START
+    rjmp RESET_START 
 .org INT0addr             ; START (PD2)
     rjmp INT0_HANDLER
 .org INT1addr             ; RESET (PD3)
@@ -49,277 +49,275 @@ STR_NL:    .db 13, 10, 0, 0             ; 4 bytes
 ; ================================================================================
 ; --- Inicialização do Sistema ---
 ; ================================================================================
-RESET_START:
-    ldi r16, high(RAMEND)
+RESET_START: ; inicio do programa
+    ldi r16, high(RAMEND) ; carrega o endereço de fim da RAM na pilha
     out SPH, r16
-    ldi r16, low(RAMEND)
+    ldi r16, low(RAMEND) ; carrega o endereço de fim da RAM na pilha
     out SPL, r16
 
     ; I/O Config
-    ldi r16, 0x0F
+    ldi r16, 0x0F ; carrega o valor 0x0F em r16
     out DDRB, r16    ; PB0-3 Saída BCD
     out DDRC, r16    ; PC0-3 Saída Seleção Dígitos
     ldi r16, (1<<PD5) ; Buzzer Saída, Outros Entrada
     out DDRD, r16
     
     ; USART Config (9600 @ 16MHz) -> UBRR = 103
-    ldi r16, 103
-    sts UBRR0L, r16
-    ldi r16, (1<<TXEN0)
-    sts UCSR0B, r16
-    ldi r16, (3<<UCSZ00)
-    sts UCSR0C, r16
+    ldi r16, 103 ; carrega o valor 103 em r16
+    sts UBRR0L, r16 ; carrega o valor de r16 no registrador UBRR0L
+    ldi r16, (1<<TXEN0) ; carrega o valor 0x02 em r16
+    sts UCSR0B, r16 ; carrega o valor de r16 no registrador UCSR0B
+    ldi r16, (3<<UCSZ00) ; carrega o valor 0x06 em r16
+    sts UCSR0C, r16 ; carrega o valor de r16 no registrador UCSR0C
 
     ; Timer1 Config (1s @ 16MHz) - CTC, Prescaler 1024
-    ldi r16, high(15624)
+    ldi r16, high(15624) ; carrega a parte alta do valor 15624 em r16
     sts OCR1AH, r16
-    ldi r16, low(15624)
+    ldi r16, low(15624) ; carrega a parte baixa do valor 15624 em r16
     sts OCR1AL, r16
-    ldi r16, (1<<WGM12)|(1<<CS12)|(1<<CS10)
-    sts TCCR1B, r16
-    ldi r16, (1<<OCIE1A)
-    sts TIMSK1, r16
+    ldi r16, (1<<WGM12)|(1<<CS12)|(1<<CS10) ; carrega o valor 0x09 em r16
+    sts TCCR1B, r16 ; carrega o valor de r16 no registrador TCCR1B
+    ldi r16, (1<<OCIE1A) ; carrega o valor 0x02 em r16
+    sts TIMSK1, r16 ; carrega o valor de r16 no registrador TIMSK1
 
     ; Timer2 Config (Multiplexação ~2ms)
-    ldi r16, 125
-    sts OCR2A, r16
-    ldi r16, (1<<WGM21)
-    sts TCCR2A, r16
+    ldi r16, 125 ; carrega o valor 125 em r16
+    sts OCR2A, r16 ; carrega o valor de r16 no registrador OCR2A
+    ldi r16, (1<<WGM21) ; carrega o valor 0x02 em r16
+    sts TCCR2A, r16 ; carrega o valor de r16 no registrador TCCR2A
     ldi r16, (1<<CS22)|(1<<CS21) ; Prescaler 256
-    sts TCCR2B, r16
-    ldi r16, (1<<OCIE2A)
-    sts TIMSK2, r16
+    sts TCCR2B, r16 ; carrega o valor de r16 no registrador TCCR2B
+    ldi r16, (1<<OCIE2A) ; carrega o valor 0x02 em r16
+    sts TIMSK2, r16 ; carrega o valor de r16 no registrador TIMSK2
 
     ; Interrupções Externas
     ldi r16, (1<<ISC01)|(1<<ISC00)|(1<<ISC11)|(1<<ISC10) ; Borda subida
-    sts EICRA, r16
+    sts EICRA, r16 ; carrega o valor de r16 no registrador EICRA
     ldi r16, (1<<INT0)|(1<<INT1)
-    out EIMSK, r16
+    out EIMSK, r16 ; carrega o valor de r16 no registrador EIMSK
     
     ; PCINT para MODE (PD4)
-    ldi r16, (1<<PCIE2)
-    sts PCICR, r16
-    ldi r16, (1<<PCINT20)
-    sts PCMSK2, r16
+    ldi r16, (1<<PCIE2) ; carrega o valor 0x02 em r16, pois precisa habilitar a interrupção para o PCINT2
+    sts PCICR, r16 ; carrega o valor de r16 no registrador PCICR
+    ldi r16, (1<<PCINT20) ; carrega o valor 0x02 em r16, pois precisa habilitar a interrupção para o PCINT20
+    sts PCMSK2, r16 ; carrega o valor de r16 no registrador PCMSK2
 
     ; Inicialização Variáveis e Flags
-    ldi r16, 1
-    sts MODO_ATUAL, r16
-    clr r16
-    sts CRON_RODANDO, r16
-    sts DIGITO_SEL, r16
-    sts FLAG_1SEC, r16
-    sts FLAG_START, r16
-    sts FLAG_RESET, r16
-    sts FLAG_MODE, r16
-    sei
+    ldi r16, 1 ; carrega o valor 1 em r16
+    sts MODO_ATUAL, r16 ; carrega o valor de r16 no registrador MODO_ATUAL
+    clr r16 ; limpa o registrador r16
+    sts CRON_RODANDO, r16 ; inicializa o cronômetro como parado
+    sts DIGITO_SEL, r16 ; inicializa o dígito selecionado como 0
+    sts FLAG_1SEC, r16 ; inicializa a flag de 1 segundo como 0
+    sts FLAG_START, r16 ; inicializa a flag de start como 0
+    sts FLAG_RESET, r16 ; inicializa a flag de reset como 0
+    sts FLAG_MODE, r16 ; inicializa a flag de mode como 0
+    sei ; habilita as interrupções
 
 ; ================================================================================
 ; --- Loop Principal (Processamento Baseado em Flags) ---
 ; ================================================================================
 MAIN_LOOP:
     ; Verifica Flag Timer 1 (1 Segundo)
-    lds r16, FLAG_1SEC
-    tst r16
-    breq SKIP_1SEC
-    rjmp PROC_1SEC
+    lds r16, FLAG_1SEC ; carrega o valor do registrador FLAG_1SEC em r16
+    tst r16 ; testa o valor de r16
+    breq SKIP_1SEC ; se o valor de r16 for 0, pula para o SKIP_1SEC
+    rjmp PROC_1SEC ; se o valor de r16 for diferente de 0, pula para o PROC_1SEC
 SKIP_1SEC:
-
     ; Verifica Flag START
-    lds r16, FLAG_START
-    tst r16
-    breq SKIP_START
-    rjmp PROC_START
+    lds r16, FLAG_START ; carrega o valor do registrador FLAG_START em r16
+    tst r16 ; testa o valor de r16
+    breq SKIP_START ; se o valor de r16 for 0, pula para o SKIP_START
+    rjmp PROC_START ; se o valor de r16 for diferente de 0, pula para o PROC_START
 SKIP_START:
-
     ; Verifica Flag RESET
-    lds r16, FLAG_RESET
-    tst r16
-    breq SKIP_RESET
-    rjmp PROC_RESET
+    lds r16, FLAG_RESET ; carrega o valor do registrador FLAG_RESET em r16
+    tst r16 ; testa o valor de r16
+    breq SKIP_RESET ; se o valor de r16 for 0, pula para o SKIP_RESET
+    rjmp PROC_RESET ; se o valor de r16 for diferente de 0, pula para o PROC_RESET
 SKIP_RESET:
-
     ; Verifica Flag MODE
-    lds r16, FLAG_MODE
-    tst r16
-    breq SKIP_MODE
-    rjmp PROC_MODE
+    lds r16, FLAG_MODE ; carrega o valor do registrador FLAG_MODE em r16
+    tst r16 ; testa o valor de r16
+    breq SKIP_MODE ; se o valor de r16 for 0, pula para o SKIP_MODE
+    rjmp PROC_MODE ; se o valor de r16 for diferente de 0, pula para o PROC_MODE
 SKIP_MODE:
-
+    ; se nenhuma flag foi ativada, pula para o MAIN_LOOP
     rjmp MAIN_LOOP
 
 ; --- Processa Flag de 1 Segundo ---
-PROC_1SEC:
-    clr r16
-    sts FLAG_1SEC, r16
+PROC_1SEC: ; processa a flag de 1 segundo
+    clr r16 ; limpa o registrador r16
+    sts FLAG_1SEC, r16 ; limpa a flag de 1 segundo
 
-    lds r16, MODO_ATUAL
-    cpi r16, 3
-    breq chk_cr_1sec  ; Pula relógio se no modo ajuste
+    lds r16, MODO_ATUAL ; carrega o valor do registrador MODO_ATUAL em r16
+    cpi r16, 3 ; compara o valor de r16 com 3
+    breq chk_cr_1sec  ; se o valor de r16 for 3, pula para o chk_cr_1sec
     
-    rcall INC_REL
-    lds r16, MODO_ATUAL
-    cpi r16, 1
-    brne chk_cr_1sec
-    rcall SEND_TIME_REL
-    rjmp MAIN_LOOP
+    rcall INC_REL ; incrementa o relógio
+    lds r16, MODO_ATUAL ; carrega o valor do registrador MODO_ATUAL em r16
+    cpi r16, 1 ; compara o valor de r16 com 1
+    breq chk_cr_1sec ; se o valor de r16 for 1, pula para o chk_cr_1sec
+    rcall SEND_TIME_REL ; envia o tempo do relógio
 
-chk_cr_1sec:
-    lds r16, MODO_ATUAL
-    cpi r16, 2
-    brne ml_out1
-    lds r16, CRON_RODANDO
-    tst r16
-    breq ml_out1
-    rcall INC_CRON
-    rcall SEND_TIME_CRON
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
+
+chk_cr_1sec: ;
+    lds r16, MODO_ATUAL ; carrega o valor do registrador MODO_ATUAL em r16
+    cpi r16, 2 ; compara o valor de r16 com 2
+    brne ml_out1 ; se o valor de r16 for diferente de 2, pula para o ml_out1
+    lds r16, CRON_RODANDO ; carrega o valor do registrador CRON_RODANDO em r16
+    tst r16 ; testa o valor de r16
+    breq ml_out1 ; se o valor de r16 for 0, pula para o ml_out1
+    rcall INC_CRON ; incrementa o cronômetro
+    rcall SEND_TIME_CRON ; envia o tempo do cronômetro
 ml_out1:
-    rjmp MAIN_LOOP
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
 ; --- Processa Flag START (INT0) ---
-PROC_START:
-    clr r16
-    sts FLAG_START, r16
-    rcall DEBOUNCE
+PROC_START: ; processa a flag de start
+    clr r16 ; limpa o registrador r16
+    sts FLAG_START, r16 ; limpa a flag de start
+    rcall DEBOUNCE ; debounce do botão start, espera para evitar falsos clicks
     
-    lds r16, MODO_ATUAL
-    cpi r16, 2
-    breq start_c_logic
-    cpi r16, 3
-    breq next_d_logic
-    rjmp MAIN_LOOP
+    lds r16, MODO_ATUAL ; carrega o valor do registrador MODO_ATUAL em r16
+    cpi r16, 2 ; compara o valor de r16 com 2
+    breq start_c_logic ; se o valor de r16 for 2, pula para o start_c_logic
+    cpi r16, 3 ; compara o valor de r16 com 3
+    breq next_d_logic ; se o valor de r16 for 3, pula para o next_d_logic
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
-start_c_logic:
-    rcall BIP
-    lds r16, CRON_RODANDO
-    ldi r17, 1
-    eor r16, r17
-    sts CRON_RODANDO, r16
-    ldi ZH, high(STR_M2 << 1)
-    ldi ZL, low(STR_M2 << 1)
-    rcall UART_PRINT
-    ldi ZH, high(STR_START << 1)
-    ldi ZL, low(STR_START << 1)
-    rcall UART_PRINT
-    rjmp MAIN_LOOP
+start_c_logic: ; processa a lógica do start no cronômetro
+    rcall BIP ; bip do buzzer
+    lds r16, CRON_RODANDO ; carrega o valor do registrador CRON_RODANDO em r16
+    ldi r17, 1 ; carrega o valor 1 em r17
+    eor r16, r17 ; inverte o valor de r16
+    sts CRON_RODANDO, r16 ; carrega o valor de r16 no registrador CRON_RODANDO
+    ldi ZH, high(STR_M2 << 1) ; carrega a parte alta do endereço da string STR_M2 em ZH
+    ldi ZL, low(STR_M2 << 1) ; carrega a parte baixa do endereço da string STR_M2 em ZL
+    rcall UART_PRINT ; envia a string STR_M2 pela serial
+    ldi ZH, high(STR_START << 1) ; carrega a parte alta do endereço da string STR_START em ZH
+    ldi ZL, low(STR_START << 1) ; carrega a parte baixa do endereço da string STR_START em ZL
+    rcall UART_PRINT ; envia a string STR_START pela serial
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
-next_d_logic:
-    lds r16, DIGITO_SEL
-    inc r16
-    andi r16, 0x03
-    sts DIGITO_SEL, r16
-    rcall SEND_MSG_AJUSTE
-    rjmp MAIN_LOOP
+next_d_logic: ; processa a lógica do next no dígito
+    lds r16, DIGITO_SEL ; carrega o valor do registrador DIGITO_SEL em r16
+    inc r16 ; incrementa o valor de r16
+    andi r16, 0x03 ; aplica a máscara 0x03 em r16
+    sts DIGITO_SEL, r16 ; carrega o valor de r16 no registrador DIGITO_SEL
+    rcall SEND_MSG_AJUSTE ; envia a mensagem de ajuste
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
 ; --- Processa Flag RESET (INT1) ---
-PROC_RESET:
+PROC_RESET: ; processa a flag de reset
     clr r16
-    sts FLAG_RESET, r16
-    rcall DEBOUNCE
+    sts FLAG_RESET, r16 ; limpa a flag de reset
+    rcall DEBOUNCE ; debounce do botão reset, espera para evitar falsos clicks
 
-    lds r16, MODO_ATUAL
-    cpi r16, 2
-    breq reset_c_logic
-    cpi r16, 3
-    breq inc_d_logic
-    rjmp MAIN_LOOP
+    lds r16, MODO_ATUAL ; carrega o valor do registrador MODO_ATUAL em r16
+    cpi r16, 2 ; compara o valor de r16 com 2
+    breq reset_c_logic ; se o valor de r16 for 2, pula para o reset_c_logic
+    cpi r16, 3 ; compara o valor de r16 com 3
+    breq inc_d_logic ; se o valor de r16 for 3, pula para o inc_d_logic
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
-reset_c_logic:
-    rcall BIP
-    lds r16, CRON_RODANDO
-    tst r16
-    brne rst_msg_only
-    ldi ZH, high(VAL_CRON)
-    ldi ZL, low(VAL_CRON)
-    clr r17
-    st Z+, r17
-    st Z+, r17
-    st Z+, r17
-    st Z, r17
-    ldi ZH, high(STR_M2 << 1)
-    ldi ZL, low(STR_M2 << 1)
-    rcall UART_PRINT
-    ldi ZH, high(STR_ZERO << 1)
-    ldi ZL, low(STR_ZERO << 1)
-    rcall UART_PRINT
-    rjmp MAIN_LOOP
-rst_msg_only:
-    ldi ZH, high(STR_M2 << 1)
-    ldi ZL, low(STR_M2 << 1)
-    rcall UART_PRINT
-    ldi ZH, high(STR_RESET << 1)
-    ldi ZL, low(STR_RESET << 1)
-    rcall UART_PRINT
-    rjmp MAIN_LOOP
+reset_c_logic: ; processa a lógica do reset no cronômetro
+    rcall BIP ; chama o BIP
+    lds r16, CRON_RODANDO ; carrega o valor do registrador CRON_RODANDO em r16
+    tst r16 ; testa o valor de r16
+    brne rst_msg_only ; se o valor de r16 for diferente de 0, pula para o rst_msg_only
+    ldi ZH, high(VAL_CRON) ; carrega a parte alta do endereço da string VAL_CRON em ZH
+    ldi ZL, low(VAL_CRON) ; carrega a parte baixa do endereço da string VAL_CRON em ZL
+    clr r17 ; limpa o registrador r17
+    st Z+, r17 ; carregar valor 0 em Z+ e incrementar Z
+    st Z+, r17 ; carregar valor 0 em Z+ e incrementar Z
+    st Z+, r17 ; carregar valor 0 em Z+ e incrementar Z
+    st Z, r17 ; carregar valor 0 em Z
+    ldi ZH, high(STR_M2 << 1) ; carrega a parte alta do endereço da string STR_M2 em ZH
+    ldi ZL, low(STR_M2 << 1) ; carrega a parte baixa do endereço da string STR_M2 em ZL
+    rcall UART_PRINT ; envia a string STR_M2 pela serial
+    ldi ZH, high(STR_ZERO << 1) ; carrega a parte alta do endereço da string STR_ZERO em ZH
+    ldi ZL, low(STR_ZERO << 1) ; carrega a parte baixa do endereço da string STR_ZERO em ZL
+    rcall UART_PRINT ; envia a string STR_ZERO pela serial
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
-inc_d_logic:
+rst_msg_only: ; processa a lógica do reset no cronômetro
+    ldi ZH, high(STR_M2 << 1) ; carrega a parte alta do endereço da string STR_M2 em ZH
+    ldi ZL, low(STR_M2 << 1) ; carrega a parte baixa do endereço da string STR_M2 em ZL
+    rcall UART_PRINT ; envia a string STR_M2 pela serial
+    ldi ZH, high(STR_RESET << 1) ; carrega a parte alta do endereço da string STR_RESET em ZH
+    ldi ZL, low(STR_RESET << 1) ; carrega a parte baixa do endereço da string STR_RESET em ZL
+    rcall UART_PRINT ; envia a string STR_RESET pela serial
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
+
+inc_d_logic: ; processa a lógica do incremento no dígito
     lds r17, DIGITO_SEL
-    ldi ZH, high(VAL_REL)
-    ldi ZL, low(VAL_REL)
-    add ZL, r17
-    clr r16
-    adc ZH, r16
-    ld r18, Z
-    inc r18
-    cpi r17, 1
-    breq lim_6
-    cpi r17, 3
-    breq lim_6
-    cpi r18, 10
-    brne save_digit
-    clr r18
-    rjmp save_digit
-lim_6:
-    cpi r18, 6
-    brne save_digit
-    clr r18
-save_digit:
-    st Z, r18
-    rjmp MAIN_LOOP
+    ldi ZH, high(VAL_REL) ; carrega a parte alta do endereço da string VAL_REL em ZH
+    ldi ZL, low(VAL_REL) ; carrega a parte baixa do endereço da string VAL_REL em ZL
+    add ZL, r17 ; adiciona o valor de r17 a ZL
+    clr r16 ; limpa o registrador r16
+    adc ZH, r16 ; adiciona o valor de r16 a ZH
+    ld r18, Z ; carrega o valor de Z em r18
+    inc r18 ; incrementa o valor de r18
+    cpi r17, 1 ; compara o valor de r17 com 1
+    breq lim_6 ; se o valor de r17 for 1, pula para o lim_6
+    cpi r17, 3 ; compara o valor de r17 com 3
+    breq lim_6 ; se o valor de r17 for 3, pula para o lim_6
+    cpi r18, 10 ; compara o valor de r18 com 10
+    brne save_digit ; se o valor de r18 for diferente de 10, pula para o save_digit
+    clr r18 ; limpa o registrador r18
+    rjmp save_digit ; pula para o save_digit
+lim_6: ; processa a lógica do limite 6
+    cpi r18, 6 ; compara o valor de r18 com 6
+    brne save_digit ; se o valor de r18 for diferente de 6, pula para o save_digit
+    clr r18 ; limpa o registrador r18
+save_digit: ; processa a lógica do save_digit
+    st Z, r18 ; carrega o valor de r18 em Z
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
 ; --- Processa Flag MODE (PCINT2) ---
-PROC_MODE:
-    clr r16
-    sts FLAG_MODE, r16
-    rcall DEBOUNCE
-    rcall BIP
+PROC_MODE: ; processa a flag de mode
+    clr r16 ; limpa o registrador r16
+    sts FLAG_MODE, r16 ; limpa a flag de mode
+    rcall DEBOUNCE ; debounce do botão mode, espera para evitar falsos clicks
+    rcall BIP ; bip
     
-    lds r16, MODO_ATUAL
-    inc r16
-    cpi r16, 4
-    brne m_switched
-    ldi r16, 1
-m_switched:
-    sts MODO_ATUAL, r16
+    lds r16, MODO_ATUAL ; carrega o valor do registrador MODO_ATUAL em r16
+    inc r16 ; incrementa o valor de r16
+    cpi r16, 4 ; compara o valor de r16 com 4
+    brne m_switched ; se o valor de r16 for diferente de 4, pula para o m_switched
+    ldi r16, 1 ; carrega o valor 1 em r16
+m_switched: ; processa a lógica do m_switched
+    sts MODO_ATUAL, r16 ; carrega o valor de r16 no registrador MODO_ATUAL
+    cpi r16, 2 ; compara o valor de r16 com 2
+    breq e_mode2 ; se o valor de r16 for 2, pula para o e_mode2
+    cpi r16, 3 ; compara o valor de r16 com 3
+    breq i_mode3 ; se o valor de r16 for 3, pula para o i_mode3
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
-    cpi r16, 2
-    breq e_mode2
-    cpi r16, 3
-    breq i_mode3
-    rjmp MAIN_LOOP
+e_mode2: ; processa a lógica do e_mode2
+    ldi ZH, high(VAL_CRON) ; carrega a parte alta do endereço da string VAL_CRON em ZH
+    ldi ZL, low(VAL_CRON) ; carrega a parte baixa do endereço da string VAL_CRON em ZL
+    clr r17 ; limpa o registrador r17
+    st Z+, r17 ; carregar valor 0 em Z+ e incrementar Z
+    st Z+, r17 ; carregar valor 0 em Z+ e incrementar Z
+    st Z+, r17 ; carregar valor 0 em Z+ e incrementar Z
+    st Z, r17 ; carregar valor 0 em Z
+    sts CRON_RODANDO, r17 ; carrega o valor de r17 no registrador CRON_RODANDO
+    ldi ZH, high(STR_M2 << 1) ; carrega a parte alta do endereço da string STR_M2 em ZH
+    ldi ZL, low(STR_M2 << 1) ; carrega a parte baixa do endereço da string STR_M2 em ZL
+    rcall UART_PRINT ; envia a string STR_M2 pela serial
+    ldi ZH, high(STR_ZERO << 1) ; carrega a parte alta do endereço da string STR_ZERO em ZH
+    ldi ZL, low(STR_ZERO << 1) ; carrega a parte baixa do endereço da string STR_ZERO em ZL
+    rcall UART_PRINT ; envia a string STR_ZERO pela serial
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
-e_mode2:
-    ldi ZH, high(VAL_CRON)
-    ldi ZL, low(VAL_CRON)
-    clr r17
-    st Z+, r17
-    st Z+, r17
-    st Z+, r17
-    st Z, r17
-    sts CRON_RODANDO, r17 
-    ldi ZH, high(STR_M2 << 1)
-    ldi ZL, low(STR_M2 << 1)
-    rcall UART_PRINT
-    ldi ZH, high(STR_ZERO << 1)
-    ldi ZL, low(STR_ZERO << 1)
-    rcall UART_PRINT
-    rjmp MAIN_LOOP
-
-i_mode3:
-    clr r17
-    sts DIGITO_SEL, r17
-    rcall SEND_MSG_AJUSTE
-    rjmp MAIN_LOOP
+i_mode3: ; processa a lógica do i_mode3
+    clr r17 ; limpa o registrador r17
+    sts DIGITO_SEL, r17 ; carrega o valor de r17 no registrador DIGITO_SEL
+    rcall SEND_MSG_AJUSTE ; envia a mensagem de ajuste
+    rjmp MAIN_LOOP ; pula para o MAIN_LOOP
 
 ; ================================================================================
 ; --- Interrupções (Apenas Marcam Flags e Limpam Contexto) ---
