@@ -321,17 +321,21 @@ i_mode3:
     rcall SEND_MSG_AJUSTE
     rjmp MAIN_LOOP
 
-; ================================================================================
 ; --- Interrupções (Apenas Marcam Flags e Limpam Contexto) ---
-; ================================================================================
+
 TIMER1_COMPA_ISR:
+
+    ; Conforme visto em sala de aula, salva o contexto do SREG antes de tratar
+    ; a interrupção.
+
     push r16
     in r16, SREG
     push r16
 
     ldi r16, 1
-    sts FLAG_1SEC, r16
+    sts FLAG_1SEC, r16    ; Seta flag de 1S para ativa - 1
 
+    ; Restaura o contexto do SREG. 
     pop r16
     out SREG, r16
     pop r16
@@ -339,11 +343,11 @@ TIMER1_COMPA_ISR:
 
 INT0_HANDLER:
     push r16
-    in r16, SREG
+    in r16, SREG 
     push r16
 
     ldi r16, 1
-    sts FLAG_START, r16
+    sts FLAG_START, r16 ; Seta flag do start para ativa - 1
 
     pop r16
     out SREG, r16
@@ -356,7 +360,7 @@ INT1_HANDLER:
     push r16
 
     ldi r16, 1
-    sts FLAG_RESET, r16
+    sts FLAG_RESET, r16  ; Seta a flag de reset para ativa - 1
 
     pop r16
     out SREG, r16
@@ -369,10 +373,10 @@ PCINT2_HANDLER:
     push r16
 
     in r16, PIND
-    sbrs r16, 4         ; Processa apenas na borda de subida
+    sbrs r16, 4         ; processa a interrupção de PCINT apenas no pino D4
     rjmp p2_out
     ldi r16, 1
-    sts FLAG_MODE, r16
+    sts FLAG_MODE, r16    ; Seta flag de mode para ativa - 
 p2_out:
     pop r16
     out SREG, r16
@@ -380,10 +384,9 @@ p2_out:
     reti
 
 ; --- Interrupção Multiplexação (Timer 2) ---
-; Esta ISR continua fazendo o trabalho direto pois precisa ser em tempo real
 TIMER2_COMPA_ISR:
     push r16
-    in r16, SREG
+    in r16, SREG    ; Salva contexto e registradores utilizados na interrupção 
     push r16
     push r17
     push r18
@@ -395,16 +398,16 @@ TIMER2_COMPA_ISR:
     clr r16
     out PORTC, r16
 
-    lds r17, MUX_CONT
+    lds r17, MUX_CONT ; Carrega o elemento para ser exibido
     inc r17
-    andi r17, 0x03
-    sts MUX_CONT, r17
+    andi r17, 0x03    ; Valor circular de seleção [0,3]
+    sts MUX_CONT, r17 ; Salva na memória o valor utilizado
 
     ; Seleciona Dados
-    lds r16, MODO_ATUAL
+    lds r16, MODO_ATUAL    ; Verifica os modos ( modo 3 tem tratamento especial )
     cpi r16, 2
-    breq load_cron
-    ldi ZH, high(VAL_REL)
+    breq load_cron         ; Caso seja modo 2, carregue os dados do cronometro
+    ldi ZH, high(VAL_REL)  ; Caso contrário, carregue os dados do relógio
     ldi ZL, low(VAL_REL)
     rjmp process_mux
 load_cron:
@@ -412,32 +415,32 @@ load_cron:
     ldi ZL, low(VAL_CRON)
 
 process_mux:
-    add ZL, r17
-    clr r16
+    add ZL, r17           ; Operação com o Z (dado vetor de dados da memória referente aos dados
+    clr r16               ; qual valor irá exibir)
     adc ZH, r16
     ld r18, Z
 
-    lds r16, MODO_ATUAL
-    cpi r16, 3
+    lds r16, MODO_ATUAL  
+    cpi r16, 3            ; Se o modo atual não for 3, exibe os dados
     brne display_on
-    lds r16, DIGITO_SEL
+    lds r16, DIGITO_SEL   ; Caso seja o modo 3, tem que tratar se o número exibido é o num selecionado para editar.
     cp r16, r17
     brne display_on
     
-    lds r16, BLINK_CONT
+    lds r16, BLINK_CONT   ; Uso do contador BLINK_CONT para desligar o display ( efeito de piscar )
     inc r16
     sts BLINK_CONT, r16
-    sbrc r16, 7 
+    sbrc r16, 7           ; Vai desligar o display quando o bit mais significativo de BLINK_CONT for 1.
     rjmp display_off
 
 display_on:
     out PORTB, r18
-    ldi r16, 8       ; MODIFICADO: Inicia com o bit em PC3 (0b1000) em vez de PC0 (0b0001)
-    mov r19, r17
+    ldi r16, 8       ; Carrega o valor para seleção da multiplexação (0b0001)
+    mov r19, r17     ; R19 serve como um seletor, sendo a qtd de shitleft para chegar no elemento correto
     tst r19
     breq shift_done
 shift_loop:
-    lsr r16          ; MODIFICADO: Desloca para a DIREITA (Logical Shift Right) em vez da esquerda
+    lsr r16          ; Vai deslocando o display a ser exibido da direita para esquerda.
     dec r19
     brne shift_loop
 shift_done:
@@ -454,26 +457,25 @@ display_off:
     pop r16
     reti
 
-; ================================================================================
 ; --- Funções Auxiliares ---
-; ================================================================================
+; Serve apenas para alterar o registrador Z para a exibição
 INC_REL:
-    ldi ZH, high(VAL_REL)
+    ldi ZH, high(VAL_REL)    ; Carrega os dados do relógio
     ldi ZL, low(VAL_REL)
     rcall ADD_TIME
     ret
 
 INC_CRON:
-    ldi ZH, high(VAL_CRON)
+    ldi ZH, high(VAL_CRON)    ; Carrega os dados do cronometro
     ldi ZL, low(VAL_CRON)
     rcall ADD_TIME
     ret
 
-ADD_TIME: 
-    ld r16, Z
-    inc r16
-    cpi r16, 10
-    brne s0
+ADD_TIME:         ; Faz o tratamento de caso para somar 1 a unidade até 10
+    ld r16, Z     ; Quando chega em 10, zera o valor e soma 1 a Dezena. 
+    inc r16       ; E assim segue da unidade de segundo > dezena de segundo > unidade minuto > dezena segundo
+    cpi r16, 10   ; Sempre que o valor é válido, envia direto sem atualizar os demais dados.
+    brne s0       ; Quando alcança o maior valor, zera o elemento e inc o próximo 
     clr r16
     st Z+, r16
     ld r16, Z
@@ -503,47 +505,47 @@ s0: st Z, r16
     ret
 
 BIP:
-    sbi PORTD, 5
+    sbi PORTD, 5        ; Ativa o pino 5 da PORTD - buzzer
     ldi r18, 100
-delay_bip:
+delay_bip:              ; Delay para ser o tempo de atuação
     ldi r19, 255
 delay_inner: 
     dec r19
     brne delay_inner
     dec r18
     brne delay_bip
-    cbi PORTD, 5
+    cbi PORTD, 5        ; desliga o buzzer
     ret
 
 DEBOUNCE:
     ldi r18, 50
-d_loop: ldi r19, 255
+d_loop: ldi r19, 255     ; Delay para evitar erros na entrada.
 dl2: dec r19
     brne dl2
     dec r18
     brne d_loop
     ret
 
-UART_PRINT: 
+UART_PRINT:              ; Carrega os dados de Z até que leia 0 e encerra
     lpm r16, Z+
     tst r16
     breq up_end
 wait_tx:
     lds r17, UCSR0A
     sbrs r17, UDRE0
-    rjmp wait_tx
-    sts UDR0, r16
+    rjmp wait_tx        ; Enquanto enviar os dados, aguarda 
+    sts UDR0, r16       ; Joga o dado no buffer
     rjmp UART_PRINT
 up_end:
     ret
 
 SEND_TIME_REL:
-    ldi ZH, high(STR_M1 << 1)
+    ldi ZH, high(STR_M1 << 1)     ; Carrega string do modo 1
     ldi ZL, low(STR_M1 << 1)
     rcall UART_PRINT
-    ldi ZH, high(VAL_REL)
+    ldi ZH, high(VAL_REL)         ; Carrega os dados do relógio
     ldi ZL, low(VAL_REL)
-    rcall SEND_FMT_TIME
+    rcall SEND_FMT_TIME           ; subrotina para enviar msg
     ret
 
 SEND_TIME_CRON:
@@ -556,38 +558,38 @@ SEND_TIME_CRON:
     ret
 
 SEND_FMT_TIME: 
-    movw Y, Z
-    ldd r16, Y+3
+    movw Y, Z                ; Move os 2 bytes de Z para o Y
+    ldd r16, Y+3             ; Pega os dados da dezena minuto
     rcall UART_SEND_DIGIT
-    ldd r16, Y+2
+    ldd r16, Y+2             ; pega os dados da unidade minuto
     rcall UART_SEND_DIGIT
-    ldi ZH, high(STR_SEP << 1)
+    ldi ZH, high(STR_SEP << 1) 
     ldi ZL, low(STR_SEP << 1)
     rcall UART_PRINT
-    ldd r16, Y+1
+    ldd r16, Y+1            ; pega dados dezena segundos
     rcall UART_SEND_DIGIT
-    ldd r16, Y+0
+    ldd r16, Y+0            ; pega dados da unidade segundos
     rcall UART_SEND_DIGIT
-    ldi ZH, high(STR_NL << 1)
+    ldi ZH, high(STR_NL << 1) 
     ldi ZL, low(STR_NL << 1)
     rcall UART_PRINT
     ret
 
 UART_SEND_DIGIT:
-    subi r16, -'0'
+    subi r16, -'0'            ; Cast para obter o valor da string correspondete na tabela ASCII
 wait_tx_d:
-    lds r17, UCSR0A
+    lds r17, UCSR0A 
     sbrs r17, UDRE0
     rjmp wait_tx_d
     sts UDR0, r16
     ret
 
-SEND_MSG_AJUSTE:
-    ldi ZH, high(STR_M3 << 1)
-    ldi ZL, low(STR_M3 << 1)
+SEND_MSG_AJUSTE:                    ; Identifica qual modo está e envia a msg de 
+    ldi ZH, high(STR_M3 << 1)       ; ajuste correspondente
+    ldi ZL, low(STR_M3 << 1)        ; [modo 3] msg padrão
     rcall UART_PRINT
     lds r16, DIGITO_SEL
-    cpi r16, 0
+    cpi r16, 0                      ; A seleção da msg é feita nessa comparação
     breq am0
     cpi r16, 1
     breq am1
