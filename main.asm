@@ -4,22 +4,22 @@
 .dseg
 .org 0x0100
 MODO_ATUAL:     .byte 1    ; 1, 2 ou 3
-VAL_REL:        .byte 4    ; Un. Seg, Dez. Seg, Un. Min, Dez. Min (Rel�gio)
-VAL_CRON:       .byte 4    ; Un. Seg, Dez. Seg, Un. Min, Dez. Min (Cron�metro)
+VAL_REL:        .byte 4    ; Un. Seg, Dez. Seg, Un. Min, Dez. Min (Relógio)
+VAL_CRON:       .byte 4    ; Un. Seg, Dez. Seg, Un. Min, Dez. Min (Cronômetro)
 CRON_RODANDO:   .byte 1    ; 0 = parado, 1 = rodando
 DIGITO_SEL:     .byte 1    ; 0 a 3 (Modo 3)
 MUX_CONT:       .byte 1    ; Contador para multiplexação (0-3)
 BLINK_CONT:     .byte 1    ; Contador para piscar dígito no Modo 3
 
 ; --- Flags para o Main Loop ---
-FLAG_1SEC:      .byte 1 ; flag para aumentar 1s,
-FLAG_START:     .byte 1 ; flag para o botão start
-FLAG_RESET:     .byte 1 ; flag para o botao reset
-FLAG_MODE:      .byte 1 ; flag para o botao mode
+FLAG_1SEC:      .byte 1
+FLAG_START:     .byte 1
+FLAG_RESET:     .byte 1
+FLAG_MODE:      .byte 1
 
 ; --- Vetores de Interrupção ---
-.cseg ; A partir daqui, usa a memória de programa ( flash )
-.org 0x0000 ; endereço inicial, quando o arduino é iniciado ou resetado
+.cseg
+.org 0x0000
     rjmp RESET_START
 .org INT0addr             ; START (PD2)
     rjmp INT0_HANDLER
@@ -27,12 +27,12 @@ FLAG_MODE:      .byte 1 ; flag para o botao mode
     rjmp INT1_HANDLER
 .org PCI2addr             ; MODE (PD4 via PCINT2)
     rjmp PCINT2_HANDLER
-.org OC2Aaddr             ; Multiplex (~2ms)
+.org OC2Aaddr             ; Multiplexação (~2ms)
     rjmp TIMER2_COMPA_ISR
 .org OC1Aaddr             ; 1 Segundo (CTC)
     rjmp TIMER1_COMPA_ISR
 
-; --- Strings Serial - Alinhadas (Pares) ---
+; --- Strings Serial (Flash) - Alinhadas (Pares) ---
 STR_M1:    .db "[MODO 1] ", 0           ; 10 bytes
 STR_M2:    .db "[MODO 2] ", 0           ; 10 bytes
 STR_M3:    .db "[MODO 3] ", 0           ; 10 bytes
@@ -46,8 +46,9 @@ STR_A_DM:  .db "Ajustando a dezena dos minutos", 13, 10, 0, 0   ; 34 bytes
 STR_SEP:   .db ":", 0                   ; 2 bytes
 STR_NL:    .db 13, 10, 0, 0             ; 4 bytes
 
+; ================================================================================
 ; --- Inicialização do Sistema ---
-
+; ================================================================================
 RESET_START:
     ldi r16, high(RAMEND)
     out SPH, r16
@@ -56,9 +57,9 @@ RESET_START:
 
     ; I/O Config
     ldi r16, 0x0F
-    out DDRB, r16    ; PB0-3 Sa�da BCD
-    out DDRC, r16    ; PC0-3 Sa�da Sele��o D�gitos
-    ldi r16, (1<<PD5) ; Buzzer Sa�da, Outros Entrada
+    out DDRB, r16    ; PB0-3 Saída BCD
+    out DDRC, r16    ; PC0-3 Saída Seleção Dígitos
+    ldi r16, (1<<PD5) ; Buzzer Saída, Outros Entrada
     out DDRD, r16
     
     ; USART Config (9600 @ 16MHz) -> UBRR = 103
@@ -79,7 +80,7 @@ RESET_START:
     ldi r16, (1<<OCIE1A)
     sts TIMSK1, r16
 
-    ; Timer2 Config (Multiplexa��o ~2ms)
+    ; Timer2 Config (Multiplexação ~2ms)
     ldi r16, 125
     sts OCR2A, r16
     ldi r16, (1<<WGM21)
@@ -89,7 +90,7 @@ RESET_START:
     ldi r16, (1<<OCIE2A)
     sts TIMSK2, r16
 
-    ; Interrup��es Externas
+    ; Interrupções Externas
     ldi r16, (1<<ISC01)|(1<<ISC00)|(1<<ISC11)|(1<<ISC10) ; Borda subida
     sts EICRA, r16
     ldi r16, (1<<INT0)|(1<<INT1)
@@ -101,7 +102,7 @@ RESET_START:
     ldi r16, (1<<PCINT20)
     sts PCMSK2, r16
 
-    ; Inicializa��o Vari�veis e Flags
+    ; Inicialização Variáveis e Flags
     ldi r16, 1
     sts MODO_ATUAL, r16
     clr r16
@@ -154,7 +155,7 @@ PROC_1SEC:
 
     lds r16, MODO_ATUAL
     cpi r16, 3
-    breq chk_cr_1sec  ; Pula rel�gio se no modo ajuste
+    breq chk_cr_1sec  ; Pula relógio se no modo ajuste
     
     rcall INC_REL
     lds r16, MODO_ATUAL
@@ -321,18 +322,17 @@ i_mode3:
     rjmp MAIN_LOOP
 
 ; ================================================================================
-; --- Interrup��es (Apenas Marcam Flags e Limpam Contexto) ---
+; --- Interrupções (Apenas Marcam Flags e Limpam Contexto) ---
 ; ================================================================================
 TIMER1_COMPA_ISR:
-    ; Conforme visto em aula, salva o contexto do SREG interrupção 
-    push r16            
+    push r16
     in r16, SREG
     push r16
 
     ldi r16, 1
-    sts FLAG_1SEC, r16 ; Seta flag de 1 segundo para ativa - 1
+    sts FLAG_1SEC, r16
 
-    ; Restaura o contexto do SREG e retorna da interrupção
+    pop r16
     out SREG, r16
     pop r16
     reti
@@ -343,7 +343,7 @@ INT0_HANDLER:
     push r16
 
     ldi r16, 1
-    sts FLAG_START, r16 ; Seta flag de START para ativa - 1
+    sts FLAG_START, r16
 
     pop r16
     out SREG, r16
@@ -356,7 +356,7 @@ INT1_HANDLER:
     push r16
 
     ldi r16, 1
-    sts FLAG_RESET, r16 ; Seta flag de RESET para ativa - 1
+    sts FLAG_RESET, r16
 
     pop r16
     out SREG, r16
@@ -369,30 +369,29 @@ PCINT2_HANDLER:
     push r16
 
     in r16, PIND
-    sbrs r16, 4         ; Verifica apenas o pino D4 foi ativado
+    sbrs r16, 4         ; Processa apenas na borda de subida
     rjmp p2_out
     ldi r16, 1
-    sts FLAG_MODE, r16  ; Seta flag de mode para ativa - 1
+    sts FLAG_MODE, r16
 p2_out:
-    pop r16             
-    out SREG, r16       
+    pop r16
+    out SREG, r16
     pop r16
     reti
 
-; --- Interrup��o Multiplexa��o (Timer 2) ---
-; Resposável pela exibição de digítos de multiplexação 
-s razi
+; --- Interrupção Multiplexação (Timer 2) ---
+; Esta ISR continua fazendo o trabalho direto pois precisa ser em tempo real
 TIMER2_COMPA_ISR:
     push r16
     in r16, SREG
     push r16
     push r17
-  ;    Escolha circular dos dí    push r18
+    push r18
     push r19
     push ZH
     push ZL
 
-    ; Apaga todos os d�gitos
+    ; Apaga todos os dígitos
     clr r16
     out PORTC, r16
 
@@ -456,7 +455,7 @@ display_off:
     reti
 
 ; ================================================================================
-; --- Fun��es Auxiliares ---
+; --- Funções Auxiliares ---
 ; ================================================================================
 INC_REL:
     ldi ZH, high(VAL_REL)
